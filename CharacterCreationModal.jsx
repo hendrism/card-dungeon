@@ -1,4 +1,4 @@
-// CharacterCreationModal.js - Modal for creating new characters
+// CharacterCreationModal.jsx - Modal for creating new characters
 
 import React from 'react';
 import { GAME_DATA } from './GameData.js';

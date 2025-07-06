@@ -1,4 +1,4 @@
-// DungeonScreen.js - Dungeon exploration interface
+// DungeonScreen.jsx - Dungeon exploration interface
 
 import React from 'react';
 import { Skull, Shuffle } from 'lucide-react';

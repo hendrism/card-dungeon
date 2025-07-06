@@ -1,4 +1,4 @@
-// CombatScreen.js - Combat interface with turn-based mechanics
+// CombatScreen.jsx - Combat interface with turn-based mechanics
 
 import React from 'react';
 import { GameUtils } from './GameUtils.js';

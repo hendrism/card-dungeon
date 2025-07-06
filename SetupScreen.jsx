@@ -1,4 +1,4 @@
-// SetupScreen.js - Character party setup interface
+// SetupScreen.jsx - Character party setup interface
 
 import React from 'react';
 import { Users, Shuffle } from 'lucide-react';
