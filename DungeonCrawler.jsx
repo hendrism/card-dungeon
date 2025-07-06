@@ -1,4 +1,4 @@
-// DungeonCrawler.js - Main game component that orchestrates everything
+// DungeonCrawler.jsx - Main game component that orchestrates everything
 
 import React, { useState, useEffect } from 'react';
 
@@ -7,10 +7,10 @@ import { GAME_DATA } from './GameData.js';
 import { GameUtils } from './GameUtils.js';
 import { CharacterCreator } from './CharacterCreator.js';
 import { CombatSystem } from './CombatSystem.js';
-import SetupScreen from './SetupScreen.js';
-import CharacterCreationModal from './CharacterCreationModal.js';
-import DungeonScreen from './DungeonScreen.js';
-import CombatScreen from './CombatScreen.js';
+import SetupScreen from './SetupScreen.jsx';
+import CharacterCreationModal from './CharacterCreationModal.jsx';
+import DungeonScreen from './DungeonScreen.jsx';
+import CombatScreen from './CombatScreen.jsx';
 
 const DungeonCrawler = () => {
   // ================== GAME STATE ==================
