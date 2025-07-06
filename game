@@ -1,0 +1,1250 @@
+import React, { useState, useEffect } from 'react';
+import { Sword, Shield, Heart, Zap, Users, Shuffle, ArrowRight, Crown, Skull } from 'lucide-react';
+
+const DungeonCrawler = () => {
+  const [gameState, setGameState] = useState('setup');
+  const [party, setParty] = useState([null, null, null, null]);
+  const [currentFloor, setCurrentFloor] = useState(1);
+  const [currentRoom, setCurrentRoom] = useState(1);
+  const [deck, setDeck] = useState([]);
+  const [hand, setHand] = useState([]);
+  const [enemy, setEnemy] = useState(null);
+  const [combatLog, setCombatLog] = useState([]);
+  const [selectedCard, setSelectedCard] = useState(null);
+  const [selectedCharacter, setSelectedCharacter] = useState(null);
+  const [showCharacterCreation, setShowCharacterCreation] = useState(false);
+  const [selectedSlot, setSelectedSlot] = useState(null);
+  const [selectedRace, setSelectedRace] = useState('');
+  const [selectedRole, setSelectedRole] = useState('');
+  const [cardsDrawnThisTurn, setCardsDrawnThisTurn] = useState(0);
+  const [maxCardsPerTurn] = useState(2);
+  const [showCardReference, setShowCardReference] = useState(false);
+  const [turnOrder, setTurnOrder] = useState([]);
+  const [currentTurnIndex, setCurrentTurnIndex] = useState(0);
+  const [initiativeRolled, setInitiativeRolled] = useState(false);
+
+  const races = [
+    { name: 'Human', bonus: 'Versatile: +1 to all stats', color: 'bg-blue-100' },
+    { name: 'Elf', bonus: 'Agile: +2 Speed, +1 Magic', color: 'bg-green-100' },
+    { name: 'Dwarf', bonus: 'Hardy: +2 Defense, +1 Health', color: 'bg-orange-100' },
+    { name: 'Orc', bonus: 'Strong: +2 Attack, +1 Health', color: 'bg-red-100' },
+    { name: 'Halfling', bonus: 'Lucky: Draw extra card each turn', color: 'bg-yellow-100' },
+    { name: 'Tiefling', bonus: 'Infernal: +2 Magic, Fire resistance', color: 'bg-purple-100' }
+  ];
+
+  const roles = [
+    { name: 'Fighter', health: 25, attack: 8, defense: 6, magic: 2, speed: 4, ability: 'Weapon Master: Face cards deal +3 damage' },
+    { name: 'Paladin', health: 30, attack: 6, defense: 8, magic: 4, speed: 3, ability: 'Divine Shield: Hearts restore 2 HP to party' },
+    { name: 'Rogue', health: 20, attack: 7, defense: 4, magic: 3, speed: 8, ability: 'Stealth Strike: Spades deal double damage' },
+    { name: 'Wizard', health: 15, attack: 3, defense: 3, magic: 9, speed: 5, ability: 'Arcane Power: Clubs deal magic damage' },
+    { name: 'Druid', health: 22, attack: 5, defense: 5, magic: 6, speed: 6, ability: 'Nature\'s Wrath: Diamonds boost next card' },
+    { name: 'Barbarian', health: 28, attack: 9, defense: 5, magic: 1, speed: 5, ability: 'Rage: Aces deal massive damage' }
+  ];
+
+  const enemies = [
+    { name: 'Goblin Scout', health: 15, attack: 4, defense: 2, reward: 'Draw 2 cards' },
+    { name: 'Skeleton Warrior', health: 20, attack: 6, defense: 4, reward: 'Party heals 5 HP' },
+    { name: 'Orc Berserker', health: 25, attack: 8, defense: 3, reward: 'Draw 3 cards' },
+    { name: 'Dark Mage', health: 18, attack: 7, defense: 5, reward: 'Party heals 8 HP' },
+    { name: 'Minotaur', health: 35, attack: 10, defense: 6, reward: 'Draw 4 cards' }
+  ];
+
+  useEffect(() => {
+    const suits = ['♠', '♥', '♦', '♣'];
+    const values = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+    const newDeck = [];
+    
+    suits.forEach(suit => {
+      values.forEach(value => {
+        newDeck.push({ suit, value, id: `${suit}${value}` });
+      });
+    });
+    
+    setDeck(shuffleDeck(newDeck));
+  }, []);
+
+  const shuffleDeck = (deck) => {
+    const shuffled = [...deck];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  };
+
+  const drawCards = (count) => {
+    const newHand = [...hand];
+    const newDeck = [...deck];
+    
+    for (let i = 0; i < count && newDeck.length > 0; i++) {
+      newHand.push(newDeck.pop());
+    }
+    
+    setHand(newHand);
+    setDeck(newDeck);
+    setCardsDrawnThisTurn(prev => prev + count);
+  };
+
+  const getCardEffect = (card, character) => {
+    if (!card || !character) return { description: '', damage: 0, healing: 0 };
+    
+    let cardValue = card.value === 'A' ? 11 : ['J', 'Q', 'K'].includes(card.value) ? 10 : parseInt(card.value);
+    let description = '';
+    let damage = 0;
+    let healing = 0;
+
+    switch (card.suit) {
+      case '♠':
+        damage = cardValue + character.attack;
+        description = `Physical Attack: ${damage} damage`;
+        if (character.role === 'Rogue') {
+          damage *= 2;
+          description = `Stealth Strike: ${damage} damage (doubled!)`;
+        }
+        break;
+      case '♥':
+        healing = cardValue;
+        description = `Healing: Restore ${healing} HP`;
+        if (character.role === 'Paladin') {
+          healing += 2;
+          description = `Divine Healing: Restore ${healing} HP to all`;
+        }
+        break;
+      case '♦':
+        description = 'Buff: Enhance next card played';
+        break;
+      case '♣':
+        damage = cardValue + character.magic;
+        description = `Magic Attack: ${damage} magic damage`;
+        if (character.role === 'Wizard') {
+          damage += 3;
+          description = `Arcane Blast: ${damage} magic damage`;
+        }
+        break;
+    }
+
+    if (['J', 'Q', 'K'].includes(card.value) && character.role === 'Fighter') {
+      if (damage > 0) damage += 3;
+      description += ' +3 (Weapon Master)';
+    }
+
+    if (card.value === 'A' && character.role === 'Barbarian') {
+      if (damage > 0) damage += 10;
+      description += ' +10 (RAGE!)';
+    }
+
+    return { description, damage, healing };
+  };
+
+  const openCharacterCreation = (slotIndex) => {
+    setSelectedSlot(slotIndex);
+    setSelectedRace('');
+    setSelectedRole('');
+    setShowCharacterCreation(true);
+  };
+
+  const addCharacterToParty = () => {
+    if (!selectedRace || !selectedRole || selectedSlot === null) return;
+    
+    const race = races.find(r => r.name === selectedRace);
+    const role = roles.find(r => r.name === selectedRole);
+    
+    const newParty = [...party];
+    const character = {
+      id: Date.now(),
+      race: race.name,
+      role: role.name,
+      maxHealth: role.health + (race.name === 'Dwarf' ? 1 : race.name === 'Orc' ? 1 : race.name === 'Human' ? 1 : 0),
+      health: role.health + (race.name === 'Dwarf' ? 1 : race.name === 'Orc' ? 1 : race.name === 'Human' ? 1 : 0),
+      attack: role.attack + (race.name === 'Orc' ? 2 : race.name === 'Human' ? 1 : 0),
+      defense: role.defense + (race.name === 'Dwarf' ? 2 : race.name === 'Human' ? 1 : 0),
+      magic: role.magic + (race.name === 'Elf' ? 1 : race.name === 'Tiefling' ? 2 : race.name === 'Human' ? 1 : 0),
+      speed: role.speed + (race.name === 'Elf' ? 2 : race.name === 'Human' ? 1 : 0),
+      ability: role.ability,
+      raceBonus: race.bonus
+    };
+    newParty[selectedSlot] = character;
+    setParty(newParty);
+    setShowCharacterCreation(false);
+  };
+
+  const generateRandomCharacter = (slotIndex) => {
+    const randomRace = races[Math.floor(Math.random() * races.length)];
+    const randomRole = roles[Math.floor(Math.random() * roles.length)];
+    
+    const newParty = [...party];
+    const character = {
+      id: Date.now() + Math.random(),
+      race: randomRace.name,
+      role: randomRole.name,
+      maxHealth: randomRole.health + (randomRace.name === 'Dwarf' ? 1 : randomRace.name === 'Orc' ? 1 : randomRace.name === 'Human' ? 1 : 0),
+      health: randomRole.health + (randomRace.name === 'Dwarf' ? 1 : randomRace.name === 'Orc' ? 1 : randomRace.name === 'Human' ? 1 : 0),
+      attack: randomRole.attack + (randomRace.name === 'Orc' ? 2 : randomRace.name === 'Human' ? 1 : 0),
+      defense: randomRole.defense + (randomRace.name === 'Dwarf' ? 2 : randomRace.name === 'Human' ? 1 : 0),
+      magic: randomRole.magic + (randomRace.name === 'Elf' ? 1 : randomRace.name === 'Tiefling' ? 2 : randomRace.name === 'Human' ? 1 : 0),
+      speed: randomRole.speed + (randomRace.name === 'Elf' ? 2 : randomRace.name === 'Human' ? 1 : 0),
+      ability: randomRole.ability,
+      raceBonus: randomRace.bonus
+    };
+    newParty[slotIndex] = character;
+    setParty(newParty);
+  };
+
+  const generateRandomParty = () => {
+    const shuffledRaces = [...races].sort(() => Math.random() - 0.5);
+    const shuffledRoles = [...roles].sort(() => Math.random() - 0.5);
+    
+    const newParty = [];
+    for (let i = 0; i < 4; i++) {
+      const selectedRace = shuffledRaces[i % shuffledRaces.length];
+      const selectedRole = shuffledRoles[i % shuffledRoles.length];
+      
+      const character = {
+        id: Date.now() + i + Math.random(),
+        race: selectedRace.name,
+        role: selectedRole.name,
+        maxHealth: selectedRole.health + (selectedRace.name === 'Dwarf' ? 1 : selectedRace.name === 'Orc' ? 1 : selectedRace.name === 'Human' ? 1 : 0),
+        health: selectedRole.health + (selectedRace.name === 'Dwarf' ? 1 : selectedRace.name === 'Orc' ? 1 : selectedRace.name === 'Human' ? 1 : 0),
+        attack: selectedRole.attack + (selectedRace.name === 'Orc' ? 2 : selectedRace.name === 'Human' ? 1 : 0),
+        defense: selectedRole.defense + (selectedRace.name === 'Dwarf' ? 2 : selectedRace.name === 'Human' ? 1 : 0),
+        magic: selectedRole.magic + (selectedRace.name === 'Elf' ? 1 : selectedRace.name === 'Tiefling' ? 2 : selectedRace.name === 'Human' ? 1 : 0),
+        speed: selectedRole.speed + (selectedRace.name === 'Elf' ? 2 : selectedRace.name === 'Human' ? 1 : 0),
+        ability: selectedRole.ability,
+        raceBonus: selectedRace.bonus
+      };
+      newParty.push(character);
+    }
+    setParty(newParty);
+  };
+
+  const rollInitiative = () => {
+    const activeParty = party.filter(char => char !== null && char.health > 0);
+    const initiativeOrder = activeParty.map(character => ({
+      type: 'player',
+      character,
+      initiative: Math.floor(Math.random() * 20) + 1 + character.speed
+    }));
+    
+    const enemyInitiative = {
+      type: 'enemy',
+      character: enemy,
+      initiative: Math.floor(Math.random() * 20) + 1 + enemy.attack
+    };
+    
+    initiativeOrder.push(enemyInitiative);
+    initiativeOrder.sort((a, b) => b.initiative - a.initiative);
+    
+    setTurnOrder(initiativeOrder);
+    setCurrentTurnIndex(0);
+    setInitiativeRolled(true);
+    setCombatLog(prev => [
+      ...prev,
+      "Initiative rolled!",
+      ...initiativeOrder.map((entry, index) => 
+        entry.type === 'player' 
+          ? `${index + 1}. ${entry.character.race} ${entry.character.role} (${entry.initiative})`
+          : `${index + 1}. ${entry.character.name} (${entry.initiative})`
+      )
+    ]);
+    
+    if (initiativeOrder[0].type === 'enemy') {
+      setTimeout(() => executeEnemyTurn(), 1000);
+    }
+  };
+
+  const executeEnemyTurn = () => {
+    const damage = Math.floor(Math.random() * enemy.attack) + Math.floor(enemy.attack / 2);
+    const alivePlayers = party.filter(char => char !== null && char.health > 0);
+    
+    if (alivePlayers.length > 0) {
+      const target = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
+      const actualDamage = Math.max(1, damage - (target.defense + (target.tempDefense || 0)));
+      
+      setParty(prev => prev.map(char => 
+        char && char.id === target.id 
+          ? { ...char, health: Math.max(0, char.health - actualDamage) }
+          : char
+      ));
+      
+      setCombatLog(prev => [...prev, `${enemy.name} attacks ${target.race} ${target.role} for ${actualDamage} damage!`]);
+    }
+    
+    // Always advance turn after enemy action - this was the bug
+    setTimeout(() => {
+      nextTurn();
+    }, 1500);
+  };
+
+  const applyDrawCardBonuses = () => {
+    const cardsNotDrawn = maxCardsPerTurn - cardsDrawnThisTurn;
+    
+    if (cardsNotDrawn === 2) {
+      // Drew 0 cards - major bonus
+      setParty(prev => prev.map(char => 
+        char ? { 
+          ...char, 
+          health: Math.min(char.maxHealth, char.health + 3),
+          tempAttack: (char.tempAttack || 0) + 2,
+          tempMagic: (char.tempMagic || 0) + 2
+        } : char
+      ));
+      setCombatLog(prev => [...prev, "Focus Bonus: Party heals 3 HP and gains +2 Attack/Magic for next turn!"]);
+    } else if (cardsNotDrawn === 1) {
+      // Drew 1 card - minor bonus
+      setParty(prev => prev.map(char => 
+        char ? { 
+          ...char, 
+          health: Math.min(char.maxHealth, char.health + 1),
+          tempAttack: (char.tempAttack || 0) + 1
+        } : char
+      ));
+      setCombatLog(prev => [...prev, "Discipline Bonus: Party heals 1 HP and gains +1 Attack for next turn!"]);
+    }
+    // Drew 2 cards - no bonus but no penalty
+  };
+
+  const nextTurn = () => {
+    // Clear temporary buffs/debuffs
+    setParty(prev => prev.map(char => 
+      char ? { 
+        ...char, 
+        tempDefense: 0,
+        tempAttack: 0,
+        tempMagic: 0
+      } : char
+    ));
+    
+    const nextIndex = (currentTurnIndex + 1) % turnOrder.length;
+    setCurrentTurnIndex(nextIndex);
+    setSelectedCard(null);
+    setSelectedCharacter(null);
+    
+    // Apply card draw bonuses when cycling back to start of round
+    if (nextIndex === 0) {
+      applyDrawCardBonuses();
+      setCardsDrawnThisTurn(0); // Reset for new round
+    }
+    
+    if (turnOrder[nextIndex]?.type === 'enemy') {
+      setTimeout(() => executeEnemyTurn(), 1000);
+    }
+  };
+
+  const getCurrentCharacter = () => {
+    if (!initiativeRolled || turnOrder.length === 0) return null;
+    return turnOrder[currentTurnIndex];
+  };
+
+  const isCardOptimalForCharacter = (card, character) => {
+    if (!card || !character || character.type === 'enemy') return false;
+    
+    const actualChar = character.character || character;
+    const cardValue = card.value === 'A' ? 11 : ['J', 'Q', 'K'].includes(card.value) ? 10 : parseInt(card.value);
+    
+    if (cardValue >= 9) {
+      if (card.suit === '♠' && (actualChar.attack >= 7 || actualChar.role === 'Rogue')) return true;
+      if (card.suit === '♣' && (actualChar.magic >= 6 || actualChar.role === 'Wizard')) return true;
+      if (card.suit === '♥' && actualChar.role === 'Paladin') return true;
+    }
+    
+    if (actualChar.role === 'Rogue' && card.suit === '♠') return true;
+    if (actualChar.role === 'Wizard' && card.suit === '♣') return true;
+    if (actualChar.role === 'Paladin' && card.suit === '♥') return true;
+    if (actualChar.role === 'Fighter' && ['J', 'Q', 'K'].includes(card.value)) return true;
+    if (actualChar.role === 'Barbarian' && card.value === 'A') return true;
+    
+    return false;
+  };
+
+  const startDungeon = () => {
+    if (party.filter(char => char !== null).length === 0) return;
+    setGameState('dungeon');
+    drawCards(5);
+    setCardsDrawnThisTurn(0);
+  };
+
+  const enterCombat = () => {
+    const randomEnemy = enemies[Math.floor(Math.random() * enemies.length)];
+    setEnemy({ ...randomEnemy, currentHealth: randomEnemy.health });
+    setGameState('combat');
+    setCardsDrawnThisTurn(0);
+    setInitiativeRolled(false);
+    setTurnOrder([]);
+    setCurrentTurnIndex(0);
+    setSelectedCard(null);
+    setSelectedCharacter(null);
+    setCombatLog([`A ${randomEnemy.name} appears!`]);
+  };
+
+  const calculateCardEffect = (card, character) => {
+    let damage = 0;
+    let healing = 0;
+    let special = '';
+
+    let cardValue = card.value === 'A' ? 11 : ['J', 'Q', 'K'].includes(card.value) ? 10 : parseInt(card.value);
+
+    switch (card.suit) {
+      case '♠':
+        damage = cardValue + character.attack + (character.tempAttack || 0);
+        if (character.role === 'Rogue') {
+          damage *= 2;
+          special = 'Stealth Strike!';
+        }
+        break;
+      case '♥':
+        healing = cardValue;
+        if (character.role === 'Paladin') {
+          healing += 2;
+          special = 'Divine healing spreads to party!';
+        }
+        break;
+      case '♦':
+        special = 'Next card enhanced!';
+        break;
+      case '♣':
+        damage = cardValue + character.magic + (character.tempMagic || 0);
+        if (character.role === 'Wizard') {
+          damage += 3;
+          special = 'Arcane Power!';
+        }
+        break;
+    }
+
+    if (['J', 'Q', 'K'].includes(card.value) && character.role === 'Fighter') {
+      damage += 3;
+      special = special ? `${special} Weapon Master!` : 'Weapon Master!';
+    }
+
+    if (card.value === 'A' && character.role === 'Barbarian') {
+      damage += 10;
+      special = special ? `${special} RAGE!` : 'RAGE!';
+    }
+
+    return { damage, healing, special };
+  };
+
+  const basicAttack = () => {
+    const currentChar = getCurrentCharacter();
+    if (!currentChar || currentChar.type === 'enemy') return;
+    
+    const baseAttack = currentChar.character.attack + (currentChar.character.tempAttack || 0);
+    const damage = Math.floor(baseAttack / 2) + 1;
+    const actualDamage = Math.max(1, damage - enemy.defense);
+    
+    setEnemy(prev => ({ ...prev, currentHealth: prev.currentHealth - actualDamage }));
+    setCombatLog(prev => [...prev, `${currentChar.character.race} ${currentChar.character.role} makes a basic attack for ${actualDamage} damage!`]);
+    
+    checkCombatEnd(actualDamage);
+  };
+
+  const guardAction = () => {
+    const currentChar = getCurrentCharacter();
+    if (!currentChar || currentChar.type === 'enemy') return;
+    
+    setParty(prev => prev.map(char => 
+      char && char.id === currentChar.character.id 
+        ? { ...char, tempDefense: (char.tempDefense || 0) + 3 }
+        : char
+    ));
+    
+    setCombatLog(prev => [...prev, `${currentChar.character.race} ${currentChar.character.role} takes a defensive stance! (+3 Defense until next turn)`]);
+    
+    setTimeout(() => {
+      nextTurn();
+    }, 1000);
+  };
+
+  const attemptEscape = () => {
+    const escapeChance = Math.random();
+    const speedBonus = party.reduce((total, char) => char ? total + char.speed : total, 0) / party.filter(char => char !== null).length;
+    const successChance = 0.3 + (speedBonus / 100);
+    
+    if (escapeChance < successChance) {
+      setCombatLog(prev => [...prev, "Successfully escaped from combat!"]);
+      setTimeout(() => {
+        setGameState('dungeon');
+        setEnemy(null);
+        setInitiativeRolled(false);
+        setTurnOrder([]);
+        setCardsDrawnThisTurn(0);
+      }, 1500);
+    } else {
+      setCombatLog(prev => [...prev, "Failed to escape! The enemy blocks your retreat."]);
+      setTimeout(() => {
+        nextTurn();
+      }, 1000);
+    }
+  };
+
+  const checkCombatEnd = (damageDealt) => {
+    if (enemy.currentHealth - damageDealt <= 0) {
+      setTimeout(() => {
+        setCombatLog(prev => [...prev, `${enemy.name} defeated! ${enemy.reward}`]);
+        setCurrentRoom(prev => prev + 1);
+        if (currentRoom >= 5) {
+          setCurrentFloor(prev => prev + 1);
+          setCurrentRoom(1);
+        }
+        setGameState('dungeon');
+        setEnemy(null);
+        setCardsDrawnThisTurn(0);
+        setInitiativeRolled(false);
+        setTurnOrder([]);
+        
+        if (enemy.reward.includes('Draw')) {
+          const cardCount = parseInt(enemy.reward.match(/\d+/)[0]);
+          setTimeout(() => drawCards(cardCount), 500);
+        } else if (enemy.reward.includes('heals')) {
+          const healAmount = parseInt(enemy.reward.match(/\d+/)[0]);
+          setParty(prev => prev.map(char => 
+            char ? { ...char, health: Math.min(char.maxHealth, char.health + healAmount) } : null
+          ));
+        }
+      }, 1000);
+    } else {
+      setTimeout(() => {
+        nextTurn();
+      }, 1000);
+    }
+  };
+
+  const playCard = (card, character) => {
+    if (!card || !character || character.type === 'enemy') return;
+
+    const actualChar = character.character || character;
+    const effect = calculateCardEffect(card, actualChar);
+    let logEntry = `${actualChar.race} ${actualChar.role} plays ${card.value}${card.suit}`;
+    
+    if (effect.damage > 0) {
+      const actualDamage = Math.max(1, effect.damage - enemy.defense);
+      setEnemy(prev => ({ ...prev, currentHealth: prev.currentHealth - actualDamage }));
+      logEntry += ` - Deals ${actualDamage} damage!`;
+    }
+    
+    if (effect.healing > 0) {
+      const newParty = party.map(char => {
+        if (char && char.health < char.maxHealth) {
+          return { ...char, health: Math.min(char.maxHealth, char.health + effect.healing) };
+        }
+        return char;
+      });
+      setParty(newParty);
+      logEntry += ` - Heals ${effect.healing} HP!`;
+    }
+    
+    if (effect.special) {
+      logEntry += ` ${effect.special}`;
+    }
+
+    setCombatLog(prev => [...prev, logEntry]);
+    
+    setHand(prev => prev.filter(c => c.id !== card.id));
+    setSelectedCard(null);
+    setSelectedCharacter(null);
+
+    checkCombatEnd(effect.damage > 0 ? Math.max(1, effect.damage - enemy.defense) : 0);
+  };
+
+  const getCardColor = (suit) => {
+    return suit === '♥' || suit === '♦' ? 'text-red-600' : 'text-black';
+  };
+
+  const renderSetup = () => (
+    <div className="p-6 max-w-4xl mx-auto">
+      <h1 className="text-3xl font-bold mb-6 text-center">Dungeon Crawler: Card Quest</h1>
+      
+      <div className="mb-6">
+        <h2 className="text-xl font-semibold mb-4">Build Your Party (4 slots)</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          {party.map((character, index) => (
+            <div key={index} className="border-2 border-dashed border-gray-300 p-4 rounded-lg min-h-32">
+              {character ? (
+                <div className="text-center">
+                  <div className="font-bold">{character.race}</div>
+                  <div className="text-sm text-gray-600">{character.role}</div>
+                  <div className="text-xs mt-2">HP: {character.health}</div>
+                  <div className="flex gap-1 mt-2">
+                    <button 
+                      onClick={() => generateRandomCharacter(index)}
+                      className="text-blue-500 text-xs hover:underline"
+                    >
+                      Randomize
+                    </button>
+                    <span className="text-gray-300">|</span>
+                    <button 
+                      onClick={() => {
+                        const newParty = [...party];
+                        newParty[index] = null;
+                        setParty(newParty);
+                      }}
+                      className="text-red-500 text-xs hover:underline"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="h-full flex flex-col">
+                  <div 
+                    className="text-center text-gray-500 cursor-pointer hover:bg-gray-50 flex-1 flex flex-col justify-center"
+                    onClick={() => openCharacterCreation(index)}
+                  >
+                    <Users className="mx-auto mb-2" size={24} />
+                    <div className="text-sm">Click to Add Character</div>
+                  </div>
+                  <div className="mt-2 text-center">
+                    <button 
+                      onClick={() => generateRandomCharacter(index)}
+                      className="text-blue-600 text-xs hover:underline"
+                    >
+                      Random Character
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="mb-6 text-center">
+          <button 
+            onClick={generateRandomParty}
+            className="bg-purple-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-purple-700 flex items-center gap-2 mx-auto"
+          >
+            <Shuffle size={20} />
+            Generate Random Full Party (No Duplicates)
+          </button>
+          <div className="text-sm text-gray-600 mt-2">
+            Creates 4 random characters with unique race/role combinations
+          </div>
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-6">
+        <div>
+          <h3 className="text-lg font-semibold mb-3">Available Races</h3>
+          <div className="space-y-2">
+            {races.map((race, index) => (
+              <div key={index} className={`p-3 rounded-lg ${race.color}`}>
+                <div className="font-medium">{race.name}</div>
+                <div className="text-sm text-gray-600">{race.bonus}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <h3 className="text-lg font-semibold mb-3">Available Roles</h3>
+          <div className="space-y-2">
+            {roles.map((role, index) => (
+              <div key={index} className="p-3 rounded-lg bg-gray-50">
+                <div className="font-medium">{role.name}</div>
+                <div className="text-sm text-gray-600 mb-1">
+                  HP: {role.health} | ATK: {role.attack} | DEF: {role.defense} | MAG: {role.magic} | SPD: {role.speed}
+                </div>
+                <div className="text-xs text-blue-600">{role.ability}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+        <h3 className="font-semibold mb-2">Card Combat Rules:</h3>
+        <ul className="text-sm space-y-1">
+          <li><span className="font-medium">♠ Spades:</span> Physical attacks (damage = card value + attack stat)</li>
+          <li><span className="font-medium">♥ Hearts:</span> Healing (restores HP equal to card value)</li>
+          <li><span className="font-medium">♦ Diamonds:</span> Buff next card played</li>
+          <li><span className="font-medium">♣ Clubs:</span> Magic attacks (damage = card value + magic stat)</li>
+          <li><span className="font-medium">Face Cards:</span> Count as 10, trigger special abilities</li>
+          <li><span className="font-medium">Aces:</span> Count as 11, extremely powerful</li>
+        </ul>
+      </div>
+
+      <div className="mt-6 text-center">
+        <button 
+          onClick={startDungeon}
+          disabled={party.filter(char => char !== null).length === 0}
+          className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400"
+        >
+          Enter the Dungeon
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderDungeon = () => (
+    <div className="p-6 max-w-4xl mx-auto">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold">Floor {currentFloor} - Room {currentRoom}</h2>
+        <div className="text-sm text-gray-600">Cards in deck: {deck.length}</div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        {party.map((character, index) => (
+          character && (
+            <div key={index} className="bg-white p-4 rounded-lg border">
+              <div className="font-bold">{character.race} {character.role}</div>
+              <div className="text-sm text-gray-600 mb-2">
+                HP: {character.health}/{character.maxHealth}
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div 
+                  className="bg-green-600 h-2 rounded-full" 
+                  style={{ width: `${(character.health / character.maxHealth) * 100}%` }}
+                ></div>
+              </div>
+            </div>
+          )
+        ))}
+      </div>
+
+      <div className="mb-6">
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="text-lg font-semibold">Your Hand</h3>
+          <button 
+            onClick={() => setShowCardReference(!showCardReference)}
+            className="text-blue-600 text-sm hover:underline"
+          >
+            {showCardReference ? 'Hide' : 'Show'} Card Reference
+          </button>
+        </div>
+        
+        {showCardReference && (
+          <div className="mb-4 p-4 bg-blue-50 rounded-lg text-sm">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <div className="font-medium mb-2">Card Effects:</div>
+                <div className="space-y-1">
+                  <div><span className="font-medium">♠ Spades:</span> Physical Attack</div>
+                  <div><span className="font-medium">♥ Hearts:</span> Healing</div>
+                  <div><span className="font-medium">♦ Diamonds:</span> Buff next card</div>
+                  <div><span className="font-medium">♣ Clubs:</span> Magic Attack</div>
+                </div>
+              </div>
+              <div>
+                <div className="font-medium mb-2">Special Cards:</div>
+                <div className="space-y-1">
+                  <div><span className="font-medium">Ace:</span> Value 11, triggers class abilities</div>
+                  <div><span className="font-medium">Face Cards:</span> Value 10, class bonuses</div>
+                  <div><span className="font-medium">Numbers:</span> Face value</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        <div className="flex flex-wrap gap-2">
+          {hand.map((card, index) => {
+            const effect = selectedCharacter ? getCardEffect(card, selectedCharacter) : null;
+            return (
+              <div key={index} className="relative group">
+                <div 
+                  className={`bg-white border rounded-lg p-3 cursor-pointer transition-all ${
+                    selectedCard?.id === card.id 
+                      ? 'border-blue-500 bg-blue-50' 
+                      : 'hover:bg-gray-50'
+                  }`}
+                  onClick={() => setSelectedCard(card)}
+                >
+                  <div className={`text-center font-bold ${getCardColor(card.suit)}`}>
+                    {card.value}{card.suit}
+                  </div>
+                </div>
+                
+                {selectedCharacter && effect && (
+                  <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 bg-black text-white text-xs rounded px-2 py-1 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                    {effect.description}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <button 
+          onClick={enterCombat}
+          className="bg-red-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-red-700 flex items-center gap-2"
+        >
+          <Skull size={20} />
+          Fight Monster
+        </button>
+        
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => drawCards(1)}
+            disabled={deck.length === 0 || cardsDrawnThisTurn >= maxCardsPerTurn}
+            className="bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700 flex items-center gap-2 disabled:bg-gray-400"
+          >
+            <Shuffle size={20} />
+            Draw Card ({cardsDrawnThisTurn}/{maxCardsPerTurn})
+          </button>
+          
+          <button 
+            onClick={() => setCardsDrawnThisTurn(0)}
+            className="bg-blue-600 text-white px-4 py-3 rounded-lg font-semibold hover:bg-blue-700"
+          >
+            End Turn
+          </button>
+        </div>
+        
+        <div className="text-sm text-gray-600">
+          You can draw up to {maxCardsPerTurn} cards per turn. Click "End Turn" to reset your draw limit.
+          <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+            <div className="font-medium text-green-800 mb-1">Card Draw Bonuses (applied at end of round):</div>
+            <div className="text-xs space-y-1">
+              <div><strong>Draw 0 cards:</strong> Party heals 3 HP, +2 Attack/Magic next turn</div>
+              <div><strong>Draw 1 card:</strong> Party heals 1 HP, +1 Attack next turn</div>
+              <div><strong>Draw 2 cards:</strong> No bonus (but maximum hand size)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderCombat = () => (
+    <div className="p-6 max-w-4xl mx-auto">
+      <div className="text-center mb-6">
+        <h2 className="text-2xl font-bold mb-2">Combat!</h2>
+        <div className="bg-red-100 p-4 rounded-lg">
+          <div className="font-bold text-lg">{enemy.name}</div>
+          <div className="text-sm text-gray-600 mb-2">
+            HP: {enemy.currentHealth}/{enemy.health} | ATK: {enemy.attack} | DEF: {enemy.defense}
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-3">
+            <div 
+              className="bg-red-600 h-3 rounded-full transition-all duration-300" 
+              style={{ width: `${(enemy.currentHealth / enemy.health) * 100}%` }}
+            ></div>
+          </div>
+        </div>
+      </div>
+
+      {!initiativeRolled && (
+        <div className="mb-6 text-center">
+          <button 
+            onClick={rollInitiative}
+            className="bg-yellow-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-yellow-700 flex items-center gap-2 mx-auto"
+          >
+            🎲 Roll Initiative
+          </button>
+          <div className="text-sm text-gray-600 mt-2">
+            Determine turn order based on character speed + dice roll
+          </div>
+        </div>
+      )}
+
+      {initiativeRolled && (
+        <div className="mb-6">
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <h3 className="font-semibold mb-2">Turn Order:</h3>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {turnOrder.map((entry, index) => (
+                <div 
+                  key={entry.type === 'player' ? entry.character.id : 'enemy'}
+                  className={`px-3 py-1 rounded-full text-sm ${
+                    index === currentTurnIndex 
+                      ? 'bg-green-500 text-white font-bold' 
+                      : 'bg-gray-200 text-gray-700'
+                  }`}
+                >
+                  {index + 1}. {entry.type === 'player' 
+                    ? `${entry.character.race} ${entry.character.role}` 
+                    : entry.character.name
+                  } ({entry.initiative})
+                </div>
+              ))}
+            </div>
+            {getCurrentCharacter() && (
+              <div className="text-center">
+                <div className={`font-bold ${getCurrentCharacter().type === 'enemy' ? 'text-red-700' : 'text-green-700'}`}>
+                  Current Turn: {getCurrentCharacter().type === 'player' 
+                    ? `${getCurrentCharacter().character.race} ${getCurrentCharacter().character.role}`
+                    : `${getCurrentCharacter().character.name} (Enemy)`
+                  }
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        {party.map((character, index) => (
+          character && (
+            <div 
+              key={index} 
+              className={`p-4 rounded-lg border cursor-pointer transition-all ${
+                getCurrentCharacter()?.type === 'player' && getCurrentCharacter()?.character?.id === character.id 
+                  ? 'bg-green-100 border-green-500 border-2' 
+                  : selectedCharacter?.id === character.id 
+                    ? 'bg-blue-100 border-blue-500' 
+                    : 'bg-white hover:bg-gray-50'
+              }`}
+              onClick={() => initiativeRolled ? null : setSelectedCharacter(character)}
+            >
+              <div className="font-bold text-sm">{character.race} {character.role}</div>
+              <div className="text-xs text-gray-600 mb-1">
+                HP: {character.health}/{character.maxHealth}
+                {character.tempDefense > 0 && <span className="text-blue-600"> (+{character.tempDefense} DEF)</span>}
+                {character.tempAttack > 0 && <span className="text-orange-600"> (+{character.tempAttack} ATK)</span>}
+                {character.tempMagic > 0 && <span className="text-purple-600"> (+{character.tempMagic} MAG)</span>}
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div 
+                  className="bg-green-600 h-2 rounded-full" 
+                  style={{ width: `${(character.health / character.maxHealth) * 100}%` }}
+                ></div>
+              </div>
+              {getCurrentCharacter()?.type === 'player' && getCurrentCharacter()?.character?.id === character.id && (
+                <div className="text-xs text-green-700 font-bold mt-1">⭐ Active Turn</div>
+              )}
+              {getCurrentCharacter()?.type === 'enemy' && (
+                <div className="text-xs text-red-700 font-bold mt-1">🔴 Enemy Turn</div>
+              )}
+            </div>
+          )
+        ))}
+      </div>
+
+      <div className="mb-6">
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="text-lg font-semibold">Your Hand</h3>
+          <button 
+            onClick={() => setShowCardReference(!showCardReference)}
+            className="text-blue-600 text-sm hover:underline"
+          >
+            {showCardReference ? 'Hide' : 'Show'} Card Reference
+          </button>
+        </div>
+        
+        {showCardReference && (
+          <div className="mb-4 p-4 bg-blue-50 rounded-lg text-sm">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <div className="font-medium mb-2">Card Effects:</div>
+                <div className="space-y-1">
+                  <div><span className="font-medium">♠ Spades:</span> Physical Attack</div>
+                  <div><span className="font-medium">♥ Hearts:</span> Healing</div>
+                  <div><span className="font-medium">♦ Diamonds:</span> Buff next card</div>
+                  <div><span className="font-medium">♣ Clubs:</span> Magic Attack</div>
+                </div>
+              </div>
+              <div>
+                <div className="font-medium mb-2">Special Cards:</div>
+                <div className="space-y-1">
+                  <div><span className="font-medium">Ace:</span> Value 11, triggers class abilities</div>
+                  <div><span className="font-medium">Face Cards:</span> Value 10, class bonuses</div>
+                  <div><span className="font-medium">Numbers:</span> Face value</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        <div className="flex flex-wrap gap-2">
+          {hand.map((card, index) => {
+            const currentChar = getCurrentCharacter();
+            const isOptimal = currentChar?.type === 'player' ? isCardOptimalForCharacter(card, currentChar.character) : false;
+            const effect = currentChar?.type === 'player' ? getCardEffect(card, currentChar.character) : null;
+            
+            return (
+              <div key={index} className="relative group">
+                <div 
+                  className={`bg-white border rounded-lg p-3 cursor-pointer transition-all ${
+                    selectedCard?.id === card.id 
+                      ? 'border-blue-500 bg-blue-50' 
+                      : isOptimal
+                        ? 'border-yellow-500 bg-yellow-50 shadow-lg'
+                        : 'hover:bg-gray-50'
+                  } ${getCurrentCharacter()?.type === 'enemy' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  onClick={() => getCurrentCharacter()?.type === 'player' ? setSelectedCard(card) : null}
+                >
+                  <div className={`text-center font-bold ${getCardColor(card.suit)}`}>
+                    {card.value}{card.suit}
+                  </div>
+                  {isOptimal && (
+                    <div className="text-xs text-yellow-700 font-bold mt-1">⭐ OPTIMAL</div>
+                  )}
+                </div>
+                
+                {currentChar?.type === 'player' && effect && (
+                  <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 bg-black text-white text-xs rounded px-2 py-1 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                    {effect.description}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        
+        {hand.length === 0 && (
+          <div className="text-center p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="text-yellow-800 font-medium">No cards in hand!</div>
+            <div className="text-yellow-600 text-sm">Use basic actions below or try to draw more cards</div>
+          </div>
+        )}
+      </div>
+
+      <div className="mb-6">
+        <div className="flex flex-wrap gap-2 mb-4">
+          <button 
+            onClick={() => playCard(selectedCard, getCurrentCharacter())}
+            disabled={!selectedCard || !getCurrentCharacter() || !initiativeRolled || getCurrentCharacter()?.type === 'enemy'}
+            className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400"
+          >
+            Play Card
+          </button>
+          
+          <button 
+            onClick={basicAttack}
+            disabled={!getCurrentCharacter() || !initiativeRolled || getCurrentCharacter()?.type === 'enemy'}
+            className="bg-orange-600 text-white px-4 py-3 rounded-lg font-semibold hover:bg-orange-700 disabled:bg-gray-400"
+          >
+            ⚔️ Basic Attack
+          </button>
+          
+          <button 
+            onClick={guardAction}
+            disabled={!getCurrentCharacter() || !initiativeRolled || getCurrentCharacter()?.type === 'enemy'}
+            className="bg-green-600 text-white px-4 py-3 rounded-lg font-semibold hover:bg-green-700 disabled:bg-gray-400"
+          >
+            🛡️ Guard
+          </button>
+          
+          <button 
+            onClick={attemptEscape}
+            disabled={!initiativeRolled || getCurrentCharacter()?.type === 'enemy'}
+            className="bg-yellow-600 text-white px-4 py-3 rounded-lg font-semibold hover:bg-yellow-700 disabled:bg-gray-400"
+          >
+            🏃 Escape
+          </button>
+          
+          {initiativeRolled && getCurrentCharacter()?.type === 'player' && (
+            <button 
+              onClick={nextTurn}
+              className="bg-purple-600 text-white px-4 py-3 rounded-lg font-semibold hover:bg-purple-700"
+            >
+              Skip Turn
+            </button>
+          )}
+        </div>
+        
+        {getCurrentCharacter()?.type === 'player' && (
+          <div className="text-sm text-gray-600 space-y-1 mb-4">
+            <div><strong>Basic Attack:</strong> Deal {Math.floor((getCurrentCharacter().character.attack + (getCurrentCharacter().character.tempAttack || 0)) / 2) + 1} damage (no cards needed)</div>
+            <div><strong>Guard:</strong> +3 Defense until your next turn</div>
+            <div><strong>Escape:</strong> Attempt to flee combat (success based on party speed)</div>
+            <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs">
+              <strong>Round Bonuses:</strong> Draw 0 cards = +3 HP, +2 ATK/MAG | Draw 1 card = +1 HP, +1 ATK | Draw 2 cards = No bonus
+            </div>
+          </div>
+        )}
+        
+        {getCurrentCharacter()?.type === 'enemy' && (
+          <div className="text-center p-3 bg-red-100 rounded-lg mb-4">
+            <div className="text-red-800 font-medium">Enemy is taking their turn...</div>
+          </div>
+        )}
+        
+        {selectedCard && getCurrentCharacter()?.type === 'player' && (
+          <div className="mt-4 p-4 bg-blue-50 rounded-lg border-2 border-blue-200">
+            <h4 className="font-semibold text-lg mb-3">Action Preview</h4>
+            
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <div className="font-medium text-blue-800 mb-2">Active Character:</div>
+                <div className="bg-white p-3 rounded-lg">
+                  <div className="font-bold">{getCurrentCharacter().character.race} {getCurrentCharacter().character.role}</div>
+                  <div className="text-sm text-gray-600 mt-1">
+                    ATK: {getCurrentCharacter().character.attack} | DEF: {getCurrentCharacter().character.defense + (getCurrentCharacter().character.tempDefense || 0)} | 
+                    MAG: {getCurrentCharacter().character.magic} | SPD: {getCurrentCharacter().character.speed}
+                  </div>
+                  <div className="text-xs text-blue-600 mt-1">{getCurrentCharacter().character.ability}</div>
+                </div>
+              </div>
+              
+              <div>
+                <div className="font-medium text-blue-800 mb-2">Selected Card:</div>
+                <div className="bg-white p-3 rounded-lg">
+                  <div className={`font-bold text-lg ${getCardColor(selectedCard.suit)}`}>
+                    {selectedCard.value}{selectedCard.suit}
+                  </div>
+                  <div className="text-sm text-gray-600 mt-1">
+                    Base Value: {selectedCard.value === 'A' ? 11 : ['J', 'Q', 'K'].includes(selectedCard.value) ? 10 : selectedCard.value}
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="mt-4">
+              <div className="font-medium text-blue-800 mb-2">Effect Calculation:</div>
+              <div className="bg-white p-4 rounded-lg">
+                {(() => {
+                  const effect = calculateCardEffect(selectedCard, getCurrentCharacter().character);
+                  const cardValue = selectedCard.value === 'A' ? 11 : ['J', 'Q', 'K'].includes(selectedCard.value) ? 10 : parseInt(selectedCard.value);
+                  
+                  return (
+                    <div className="space-y-2">
+                      {selectedCard.suit === '♠' && (
+                        <div>
+                          <div className="font-medium text-green-700">Physical Attack Damage:</div>
+                          <div className="text-sm">
+                            Card Value ({cardValue}) + Attack Stat ({getCurrentCharacter().character.attack}) = {cardValue + getCurrentCharacter().character.attack} damage
+                            {getCurrentCharacter().character.role === 'Rogue' && <span className="text-purple-600 font-medium"> × 2 (Stealth Strike) = {(cardValue + getCurrentCharacter().character.attack) * 2} damage</span>}
+                            {['J', 'Q', 'K'].includes(selectedCard.value) && getCurrentCharacter().character.role === 'Fighter' && <span className="text-orange-600 font-medium"> +3 (Weapon Master) = {cardValue + getCurrentCharacter().character.attack + 3} damage</span>}
+                            {selectedCard.value === 'A' && getCurrentCharacter().character.role === 'Barbarian' && <span className="text-red-600 font-medium"> +10 (RAGE!) = {cardValue + getCurrentCharacter().character.attack + 10} damage</span>}
+                          </div>
+                          <div className="text-sm text-gray-600 mt-1">
+                            vs Enemy Defense ({enemy?.defense || 0}): <span className="font-bold text-green-700">{Math.max(1, effect.damage - (enemy?.defense || 0))} actual damage</span>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {selectedCard.suit === '♥' && (
+                        <div>
+                          <div className="font-medium text-green-700">Healing:</div>
+                          <div className="text-sm">
+                            Card Value ({cardValue}) = {cardValue} HP restored
+                            {getCurrentCharacter().character.role === 'Paladin' && <span className="text-blue-600 font-medium"> +2 (Divine Shield) = {cardValue + 2} HP to entire party</span>}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {selectedCard.suit === '♦' && (
+                        <div>
+                          <div className="font-medium text-purple-700">Buff Effect:</div>
+                          <div className="text-sm">Next card played will be enhanced!</div>
+                        </div>
+                      )}
+                      
+                      {selectedCard.suit === '♣' && (
+                        <div>
+                          <div className="font-medium text-blue-700">Magic Attack Damage:</div>
+                          <div className="text-sm">
+                            Card Value ({cardValue}) + Magic Stat ({getCurrentCharacter().character.magic}) = {cardValue + getCurrentCharacter().character.magic} magic damage
+                            {getCurrentCharacter().character.role === 'Wizard' && <span className="text-purple-600 font-medium"> +3 (Arcane Power) = {cardValue + getCurrentCharacter().character.magic + 3} magic damage</span>}
+                            {['J', 'Q', 'K'].includes(selectedCard.value) && getCurrentCharacter().character.role === 'Fighter' && <span className="text-orange-600 font-medium"> +3 (Weapon Master) = {cardValue + getCurrentCharacter().character.magic + 3} magic damage</span>}
+                            {selectedCard.value === 'A' && getCurrentCharacter().character.role === 'Barbarian' && <span className="text-red-600 font-medium"> +10 (RAGE!) = {cardValue + getCurrentCharacter().character.magic + 10} magic damage</span>}
+                          </div>
+                          <div className="text-sm text-gray-600 mt-1">
+                            vs Enemy Defense ({enemy?.defense || 0}): <span className="font-bold text-blue-700">{Math.max(1, effect.damage - (enemy?.defense || 0))} actual damage</span>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {effect.special && (
+                        <div className="mt-2 p-2 bg-yellow-100 rounded border-l-4 border-yellow-500">
+                          <div className="font-medium text-yellow-800">Special Effect:</div>
+                          <div className="text-sm text-yellow-700">{effect.special}</div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-gray-100 p-4 rounded-lg">
+        <h3 className="font-semibold mb-2">Combat Log</h3>
+        <div className="text-sm space-y-1 max-h-32 overflow-y-auto">
+          {combatLog.map((entry, index) => (
+            <div key={index}>{entry}</div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderCharacterCreation = () => (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white p-6 rounded-lg max-w-md w-full mx-4 max-h-96 overflow-y-auto">
+        <h3 className="text-lg font-semibold mb-4">Create Character for Slot {selectedSlot + 1}</h3>
+        
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-2">Race</label>
+            <select 
+              className="w-full p-2 border rounded"
+              value={selectedRace}
+              onChange={(e) => setSelectedRace(e.target.value)}
+            >
+              <option value="">Select Race</option>
+              {races.map(race => (
+                <option key={race.name} value={race.name}>{race.name}</option>
+              ))}
+            </select>
+            {selectedRace && (
+              <div className="mt-2 text-xs text-gray-600">
+                {races.find(r => r.name === selectedRace)?.bonus}
+              </div>
+            )}
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium mb-2">Role</label>
+            <select 
+              className="w-full p-2 border rounded"
+              value={selectedRole}
+              onChange={(e) => setSelectedRole(e.target.value)}
+            >
+              <option value="">Select Role</option>
+              {roles.map(role => (
+                <option key={role.name} value={role.name}>{role.name}</option>
+              ))}
+            </select>
+            {selectedRole && (
+              <div className="mt-2 text-xs text-gray-600">
+                {roles.find(r => r.name === selectedRole)?.ability}
+              </div>
+            )}
+          </div>
+        </div>
+        
+        <div className="mt-6 flex gap-2">
+          <button 
+            onClick={addCharacterToParty}
+            disabled={!selectedRace || !selectedRole}
+            className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:bg-gray-400"
+          >
+            Create Character
+          </button>
+          <button 
+            onClick={() => {
+              const randomRace = races[Math.floor(Math.random() * races.length)];
+              const randomRole = roles[Math.floor(Math.random() * roles.length)];
+              setSelectedRace(randomRace.name);
+              setSelectedRole(randomRole.name);
+            }}
+            className="bg-purple-600 text-white py-2 px-4 rounded hover:bg-purple-700"
+          >
+            Random
+          </button>
+          <button 
+            onClick={() => setShowCharacterCreation(false)}
+            className="flex-1 bg-gray-600 text-white py-2 rounded hover:bg-gray-700"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {gameState === 'setup' && renderSetup()}
+      {gameState === 'dungeon' && renderDungeon()}
+      {gameState === 'combat' && renderCombat()}
+      {showCharacterCreation && renderCharacterCreation()}
+    </div>
+  );
+};
+
+export default DungeonCrawler;
