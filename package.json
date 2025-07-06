@@ -2,6 +2,7 @@
   "name": "card-dungeon",
   "version": "1.0.0",
   "private": true,
+  "homepage": "https://hendrism.github.io/card-dungeon",
   "scripts": {
     "start": "vite",
     "build": "vite build",
